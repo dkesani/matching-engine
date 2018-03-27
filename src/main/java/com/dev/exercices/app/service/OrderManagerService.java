@@ -4,10 +4,11 @@ import static java.util.Comparator.comparing;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.PriorityQueue;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.Queue;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
@@ -21,6 +22,8 @@ import com.dev.exercices.dto.OrderBook;
 
 @Service
 public class OrderManagerService implements OrderManager {
+
+  final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
   private static final Queue<Order> buyOrders = new PriorityQueue<>(comparing(Order::getPrc).reversed());
 
@@ -57,31 +60,28 @@ public class OrderManagerService implements OrderManager {
     Order orderToAdd = order;
     while((head = getQToCompare(type).peek()) != null) {
       if(addOrder(orderToAdd, head, type)) {
-        getQToAdd(type).offer(orderToAdd);
-        return OrderStatus.PENDING;
+        return addToQ(head, orderToAdd, type) ? OrderStatus.PENDING : OrderStatus.REJECTED; //getQToAdd(type).offer(orderToAdd);
       }
       else if(head.getQty() < orderToAdd.getQty()) {
         //Partially filled.. continue to peek next item in the Q.
-        orderToAdd = orderToAdd.withQty(orderToAdd.getQty() - getQToCompare(type).poll().getQty());
+        Optional<Order> polledOrder = pollQ(head, type);
+        if(polledOrder.isPresent()) {
+          orderToAdd = orderToAdd.withQty(orderToAdd.getQty() - polledOrder.get().getQty());
+        }
         continue;
       }
       else if(head.getQty() > orderToAdd.getQty()) {
-        Order polledOrder = getQToCompare(type).poll();
-        final int leftOverInQ = polledOrder.getQty() - orderToAdd.getQty();
-        Optional.of(polledOrder).ifPresent(e ->
-            getQToCompare(type).offer(polledOrder.withQty(leftOverInQ)));
-        return OrderStatus.FILLED;
+        return pollQAndUpdateQty(head, orderToAdd, type) ? OrderStatus.FILLED : OrderStatus.REJECTED;
       }
       else {
-        getQToCompare(type).poll();
-        return OrderStatus.FILLED;
+        //because head changed between the original check and now, Should we just reject or continue re-try?
+        return pollQ(head, type).isPresent() ? OrderStatus.FILLED : OrderStatus.REJECTED;
       }
     }
     //If there are no elements in the head, either because the Q is originally empty to start with or we have consumed
     // all the elements from the Q and the request is partially filled.
     if(head == null) {
-      getQToAdd(type).offer(orderToAdd);
-      return OrderStatus.PENDING;
+      return addToQ(head, orderToAdd, type) ? OrderStatus.PENDING : OrderStatus.REJECTED; //getQToAdd(type).offer(orderToAdd);
     }
     return OrderStatus.REJECTED;
   }
@@ -98,5 +98,60 @@ public class OrderManagerService implements OrderManager {
       return buyOrders;
     else
       return sellOrders;
+  }
+
+  private boolean addToQ(Order head, Order orderToAdd, OrderType type) {
+    try {
+      lock.writeLock().lockInterruptibly();
+      //If the current head & Peek element in CompareQ is null/equal OR If the currentHead in the Compare Q hasn't changed
+      if(isEquals(head, getQToCompare(type).peek())) {
+        return getQToAdd(type).offer(orderToAdd);
+      }
+    }
+    catch (InterruptedException ex) {
+      ex.printStackTrace();
+    }
+    finally {
+      lock.writeLock().unlock();
+    }
+    return false;
+  }
+
+  private boolean pollQAndUpdateQty(Order head, Order orderToAdd, OrderType type) {
+    try {
+      lock.writeLock().lockInterruptibly();
+      if(isEquals(head, getQToCompare(type).peek())) {
+        Order polledOrder = getQToCompare(type).poll();
+        final int leftOverInQ = polledOrder.getQty() - orderToAdd.getQty();
+        return polledOrder == null ? false : getQToCompare(type).offer(polledOrder.withQty(leftOverInQ));
+      }
+    }
+    catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+    finally {
+      lock.writeLock().unlock();
+    }
+    return false;
+  }
+
+  private Optional<Order> pollQ(Order head, OrderType type) {
+    try {
+      lock.writeLock().lockInterruptibly();
+      if(isEquals(head, getQToCompare(type).peek())) {
+         return Optional.ofNullable(getQToCompare(type).poll());
+      }
+    }
+    catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+    finally {
+      lock.writeLock().unlock();
+    }
+    return Optional.empty();
+  }
+
+  private boolean isEquals(Order oldHead, Order newHead) {
+    return oldHead == newHead || (oldHead != null && oldHead.equals(newHead));
   }
 }
