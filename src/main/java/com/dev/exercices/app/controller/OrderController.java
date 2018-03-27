@@ -28,11 +28,13 @@ public class OrderController {
     return orderManager.getOrderBook();
   }
 
+  // This should technically return 201 HttpStatus with the URL link to the object created.
   @PostMapping("/buy")
   ResponseEntity<OrderStatus> buy(@RequestBody @NotNull Order order) {
     return ResponseEntity.ok(orderManager.placeOrder(order, BUY));
   }
 
+  // This should technically return 201 HttpStatus with the URL link to the object created.
   @PostMapping("/sell")
   ResponseEntity<OrderStatus> sell(@RequestBody @NonNull Order order) {
     return ResponseEntity.ok(orderManager.placeOrder(order, SELL));
