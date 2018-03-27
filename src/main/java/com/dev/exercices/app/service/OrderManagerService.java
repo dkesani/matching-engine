@@ -2,9 +2,13 @@ package com.dev.exercices.app.service;
 
 import static java.util.Comparator.comparing;
 
-import java.util.Optional;
-import java.util.PriorityQueue;
-import java.util.Queue;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import javax.validation.ConstraintViolation;
+import javax.validation.ConstraintViolationException;
+import javax.validation.Validation;
 
 import org.springframework.stereotype.Service;
 
@@ -21,12 +25,23 @@ public class OrderManagerService implements OrderManager {
 
   @Override
   public OrderBook getOrderBook() {
-    return new OrderBook.Builder().buys(buyOrders).sells(sellOrders).build();
+    //Using List storage, since the Iteration on Priority Queue, doe not guarantee the order of elements.
+    List<Order> buys =  new ArrayList<>(buyOrders); buys.sort(comparing(Order::getPrc).reversed());
+    List<Order> sells =  new ArrayList<>(sellOrders); sells.sort(comparing(Order::getPrc));
+    return new OrderBook.Builder().buys(buys).sells(sells).build();
   }
 
   @Override
   public OrderStatus placeOrder(final Order order, OrderType type) {
+   validate(order);
    return match(order,type);
+  }
+
+  private boolean validate(Order order) {
+    Set<ConstraintViolation<Order>> violations =  Validation.buildDefaultValidatorFactory().getValidator()
+        .validate(order);
+    if(violations.isEmpty()) return true;
+    else throw new ConstraintViolationException(violations);
   }
 
   private boolean addOrder(final Order orderToAdd, final Order head, OrderType type) {

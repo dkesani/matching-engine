@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 @JsonDeserialize(as = Order.class)
 public interface AbstractOrder {
 
-  @NotEmpty
   @Min(value = 1, message = "Qty should be greater than 0.")
   @Max(value = 100000, message = "Qty should be less than 100001.")
   int getQty();

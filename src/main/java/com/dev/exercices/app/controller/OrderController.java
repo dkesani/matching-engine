@@ -5,8 +5,11 @@ import static com.dev.exercices.app.service.OrderManager.OrderType.BUY;
 import static com.dev.exercices.app.service.OrderManager.OrderType.SELL;
 
 import javax.inject.Inject;
+import javax.validation.constraints.NotNull;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 
 import com.dev.exercices.app.constants.OrderStatus;
@@ -26,13 +29,12 @@ public class OrderController {
   }
 
   @PostMapping("/buy")
-  ResponseEntity<OrderStatus> buy(@RequestBody Order order) {
-
+  ResponseEntity<OrderStatus> buy(@RequestBody @NotNull Order order) {
     return ResponseEntity.ok(orderManager.placeOrder(order, BUY));
   }
 
   @PostMapping("/sell")
-  ResponseEntity<OrderStatus> sell(@RequestBody Order order) {
+  ResponseEntity<OrderStatus> sell(@RequestBody @NonNull Order order) {
     return ResponseEntity.ok(orderManager.placeOrder(order, SELL));
   }
 }
